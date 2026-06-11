@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{Arm, Expr, ExprMatch, ExprPath, ItemFn, Pat, Path, visit::Visit};
+use syn::{Arm, Expr, ExprMatch, ExprPath, ItemFn, Pat, Path, spanned::Spanned, visit::Visit};
 
 struct MatchFinder<'ast> {
     found: Option<&'ast ExprMatch>,
@@ -22,6 +22,12 @@ pub fn surject(attr: TokenStream, input: TokenStream) -> TokenStream {
     let func: ItemFn = syn::parse(input).unwrap();
     let attr = attr.to_string();
     impl_surject_macro(&attr, &func).into()
+}
+
+/// Alias for `#[surject]`.
+#[proc_macro_attribute]
+pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
+    surject(attr, input)
 }
 
 fn impl_surject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
@@ -50,6 +56,103 @@ fn impl_surject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
             }
         }
     }
+}
+
+#[proc_macro_attribute]
+pub fn inject(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let func: ItemFn = syn::parse(input).unwrap();
+    let attr = attr.to_string();
+    impl_inject_macro(&attr, &func).into()
+}
+
+/// Alias for `#[inject]`.
+#[proc_macro_attribute]
+pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
+    inject(attr, input)
+}
+
+#[proc_macro_attribute]
+pub fn biject(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let func: ItemFn = syn::parse(input).unwrap();
+    let attr = attr.to_string();
+    impl_biject_macro(&attr, &func).into()
+}
+
+fn impl_biject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
+    let mut finder = MatchFinder { found: None };
+    finder.visit_item_fn(func);
+
+    let ExprMatch { arms, .. } = finder.found.unwrap_or_else(|| {
+        panic!("{attr} can only be used on functions containing a match expression")
+    });
+
+    validate_enum_to_enum_arms(arms);
+
+    // Injectivity is checked at expansion time; bail out early with a
+    // span-accurate error before generating the surjectivity check.
+    if let Some(err) = check_injectivity(arms) {
+        return err;
+    }
+
+    // Surjectivity is delegated to the compiler via exhaustiveness checking.
+    let output_type = enum_type_of_expr(arms[0].body.as_expr_path());
+    let check_arms = surjectivity_check_arms(arms);
+    let check_fn_name = format_ident!("bijectivity_check_{}", func.sig.ident);
+
+    quote! {
+        #func
+
+        #[expect(dead_code)]
+        fn #check_fn_name(output: #output_type) {
+            match output {
+                #(#check_arms)*
+            }
+        }
+    }
+}
+
+fn impl_inject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
+    let mut finder = MatchFinder { found: None };
+    finder.visit_item_fn(func);
+
+    let ExprMatch { arms, .. } = finder.found.unwrap_or_else(|| {
+        panic!("{attr} can only be used on functions containing a match expression")
+    });
+
+    validate_enum_to_enum_arms(arms);
+
+    if let Some(err) = check_injectivity(arms) {
+        return err;
+    }
+
+    quote! { #func }
+}
+
+/// Returns a `compile_error!` token stream pointing at the first duplicate
+/// output path, or `None` if the mapping is injective.
+fn check_injectivity(arms: &[Arm]) -> Option<TokenStream2> {
+    let mut seen: Vec<(String, proc_macro2::Span)> = Vec::new();
+
+    for arm in arms {
+        let Expr::Path(output) = arm.body.as_ref() else {
+            unreachable!("already validated")
+        };
+        let key = quote!(#output).to_string();
+
+        if seen.iter().any(|(k, _)| k == &key) {
+            return Some(
+                syn::Error::new(
+                    output.span(),
+                    format!("inject: `{key}` is produced by more than one arm; the mapping is not injective"),
+                )
+                .to_compile_error(),
+            );
+        }
+
+        seen.push((key, output.span()));
+    }
+
+    None
 }
 
 /// Each arm must map an enum variant path to an enum variant path.
@@ -263,5 +366,188 @@ mod tests {
     #[should_panic(expected = "match guards are not supported")]
     fn guard_panics() {
         run("fn map(a: Foo) -> Foo { match a { Foo::A if cond => Foo::B } }");
+    }
+
+    // =========================================================================
+    // inject tests
+    // =========================================================================
+
+    fn run_inject(code: &str) -> TokenStream2 {
+        let func: ItemFn = syn::parse_str(code).expect("test input failed to parse");
+        impl_inject_macro("inject", &func)
+    }
+
+    fn is_compile_error(ts: &TokenStream2) -> bool {
+        ts.to_string().contains("compile_error")
+    }
+
+    // -- valid: injective mappings --------------------------------------------
+
+    #[test]
+    fn inject_bijection_passes() {
+        // A bijection is trivially injective.
+        let output = run_inject(
+            "fn map(l: Letter) -> Letter {
+                match l {
+                    Letter::A => Letter::D,
+                    Letter::B => Letter::C,
+                    Letter::C => Letter::B,
+                    Letter::D => Letter::A,
+                }
+            }",
+        );
+        assert!(!is_compile_error(&output), "bijection should be accepted");
+        // Output is just the original function — no companion function needed.
+        let items: Vec<syn::Item> = syn::parse_file(&output.to_string()).unwrap().items;
+        assert_eq!(items.len(), 1, "inject emits only the original fn");
+    }
+
+    #[test]
+    fn inject_strict_injection_passes() {
+        // Injective but not surjective: SmallEnum maps into a subset of LargeEnum.
+        let output = run_inject(
+            "fn embed(s: Small) -> Large {
+                match s {
+                    Small::A => Large::X,
+                    Small::B => Large::Y,
+                }
+            }",
+        );
+        assert!(!is_compile_error(&output));
+    }
+
+    // -- invalid: non-injective mappings --------------------------------------
+
+    #[test]
+    fn inject_many_to_one_fails() {
+        // Two different inputs produce the same output → not injective.
+        let output = run_inject(
+            "fn collapse(d: Dir) -> Axis {
+                match d {
+                    Dir::North => Axis::Vertical,
+                    Dir::South => Axis::Vertical,
+                    Dir::East  => Axis::Horizontal,
+                    Dir::West  => Axis::Horizontal,
+                }
+            }",
+        );
+        assert!(is_compile_error(&output), "many-to-one should be rejected");
+        assert!(
+            output.to_string().contains("not injective"),
+            "error should mention injectivity"
+        );
+    }
+
+    #[test]
+    fn inject_error_names_the_duplicate() {
+        let output =
+            run_inject("fn f(x: Foo) -> Bar { match x { Foo::A => Bar::X, Foo::B => Bar::X } }");
+        assert!(is_compile_error(&output));
+        assert!(
+            output.to_string().contains("Bar :: X"),
+            "error should name the duplicate output variant"
+        );
+    }
+
+    // =========================================================================
+    // onto / one_to_one alias tests
+    // =========================================================================
+
+    #[test]
+    fn onto_is_surject_alias() {
+        let func: ItemFn = syn::parse_str(
+            "fn map(l: Letter) -> Letter { match l { Letter::A => Letter::D, Letter::B => Letter::C } }"
+        ).unwrap();
+        let via_surject = impl_surject_macro("surject", &func);
+        let via_onto = impl_surject_macro("onto", &func);
+        assert_eq!(via_surject.to_string(), via_onto.to_string());
+    }
+
+    #[test]
+    fn one_to_one_is_inject_alias() {
+        let func: ItemFn = syn::parse_str(
+            "fn map(l: Letter) -> Letter { match l { Letter::A => Letter::D, Letter::B => Letter::C } }"
+        ).unwrap();
+        let via_inject = impl_inject_macro("inject", &func);
+        let via_one_to_one = impl_inject_macro("one_to_one", &func);
+        assert_eq!(via_inject.to_string(), via_one_to_one.to_string());
+    }
+
+    // =========================================================================
+    // biject tests
+    // =========================================================================
+
+    fn run_biject(code: &str) -> TokenStream2 {
+        let func: ItemFn = syn::parse_str(code).expect("test input failed to parse");
+        impl_biject_macro("biject", &func)
+    }
+
+    #[test]
+    fn biject_bijection_passes() {
+        let output = run_biject(
+            "fn map(l: Letter) -> Letter {
+                match l {
+                    Letter::A => Letter::D,
+                    Letter::B => Letter::C,
+                    Letter::C => Letter::B,
+                    Letter::D => Letter::A,
+                }
+            }",
+        );
+        assert!(!is_compile_error(&output));
+        let items: Vec<syn::Item> = syn::parse_file(&output.to_string()).unwrap().items;
+        assert_eq!(
+            items.len(),
+            2,
+            "biject emits original fn + bijectivity_check fn"
+        );
+        let syn::Item::Fn(check) = &items[1] else {
+            panic!("expected fn")
+        };
+        assert_eq!(check.sig.ident, "bijectivity_check_map");
+    }
+
+    #[test]
+    fn biject_surjective_only_fails_injectivity() {
+        // Many-to-one: caught at proc macro level (injectivity check).
+        let output = run_biject(
+            "fn f(d: Dir) -> Axis {
+                match d {
+                    Dir::North => Axis::Vertical,
+                    Dir::South => Axis::Vertical,
+                    Dir::East  => Axis::Horizontal,
+                    Dir::West  => Axis::Horizontal,
+                }
+            }",
+        );
+        assert!(
+            is_compile_error(&output),
+            "surjective-only should be rejected"
+        );
+        assert!(output.to_string().contains("not injective"));
+    }
+
+    #[test]
+    fn biject_injective_only_generates_surjectivity_check() {
+        // Strict injection (SmallEnum -> LargeEnum): injectivity passes,
+        // but the generated bijectivity_check fn will be non-exhaustive,
+        // which the compiler will catch when the output is compiled for real.
+        let output = run_biject(
+            "fn embed(s: Small) -> Large {
+                match s {
+                    Small::A => Large::X,
+                    Small::B => Large::Y,
+                }
+            }",
+        );
+        // No compile_error in the token stream itself — the surjectivity
+        // failure will be a compiler error when the output is compiled.
+        assert!(!is_compile_error(&output));
+        let items: Vec<syn::Item> = syn::parse_file(&output.to_string()).unwrap().items;
+        assert_eq!(items.len(), 2);
+        let syn::Item::Fn(check) = &items[1] else {
+            panic!()
+        };
+        assert_eq!(check.sig.ident, "bijectivity_check_embed");
     }
 }

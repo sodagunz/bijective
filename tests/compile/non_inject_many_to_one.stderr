@@ -1,0 +1,5 @@
+error: inject: `Axis :: Vertical` is produced by more than one arm; the mapping is not injective
+  --> tests/compile/non_inject_many_to_one.rs:20:29
+   |
+20 |         Direction::South => Axis::Vertical,
+   |                             ^^^^
