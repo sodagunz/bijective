@@ -11,5 +11,9 @@ proc-macro2 = "1"
 syn = { version = "2", features = ["full", "visit"] }
 quote = "1"
 
+[lints.clippy]
+pedantic = "warn"
+nursery = "warn"
+
 [dev-dependencies]
 trybuild = { version = "1", features = ["diff"] }

@@ -5,7 +5,7 @@ use syn::{Arm, Expr, ExprMatch, ExprPath, ItemFn, Pat, Path, spanned::Spanned, v
 
 /// Find the match inside `func` and validate its arms, panicking with a
 /// user-facing message on any structural violation.
-pub(crate) fn find_and_validate<'f>(attr: &str, func: &'f ItemFn) -> &'f [Arm] {
+pub fn find_and_validate<'f>(attr: &str, func: &'f ItemFn) -> &'f [Arm] {
     let mut finder = MatchFinder { found: None };
     finder.visit_item_fn(func);
 
@@ -28,9 +28,10 @@ fn validate_enum_to_enum_arms(arms: &[Arm]) {
     );
 
     for arm in arms {
-        if arm.guard.is_some() {
-            panic!("surject: match guards are not supported");
-        }
+        assert!(
+            arm.guard.is_none(),
+            "surject: match guards are not supported"
+        );
 
         match &arm.pat {
             Pat::Path(_) => {}
@@ -50,7 +51,7 @@ fn validate_enum_to_enum_arms(arms: &[Arm]) {
 
 /// Returns a `compile_error!` token stream pointing at the first duplicate
 /// output path, or `None` if the mapping is injective.
-pub(crate) fn check_injectivity(arms: &[Arm]) -> Option<TokenStream2> {
+pub fn check_injectivity(arms: &[Arm]) -> Option<TokenStream2> {
     let mut seen: Vec<(String, proc_macro2::Span)> = Vec::new();
 
     for arm in arms {
@@ -82,7 +83,7 @@ pub(crate) fn check_injectivity(arms: &[Arm]) -> Option<TokenStream2> {
 /// Each unique output variant seen across all arms produces one arm mapping to `()`.
 /// If any variant of the output enum is absent the compiler will report a
 /// non-exhaustive match, which is exactly the surjectivity check we want.
-pub(crate) fn surjectivity_check_arms(arms: &[Arm]) -> Vec<TokenStream2> {
+pub fn surjectivity_check_arms(arms: &[Arm]) -> Vec<TokenStream2> {
     let mut seen: Vec<String> = Vec::new();
     let mut unique_outputs: Vec<ExprPath> = Vec::new();
 
@@ -127,17 +128,17 @@ fn enum_type_of_path(path: &Path) -> Path {
     }
 }
 
-pub(crate) fn enum_type_of_expr(expr: &ExprPath) -> Path {
+pub fn enum_type_of_expr(expr: &ExprPath) -> Path {
     enum_type_of_path(&expr.path)
 }
 
-pub(crate) trait AsExprPath {
+pub trait AsExprPath {
     fn as_expr_path(&self) -> &ExprPath;
 }
 
 impl AsExprPath for Expr {
     fn as_expr_path(&self) -> &ExprPath {
-        let Expr::Path(p) = self else {
+        let Self::Path(p) = self else {
             panic!("expected Expr::Path")
         };
         p

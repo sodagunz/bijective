@@ -1,6 +1,6 @@
 use syn::{ExprMatch, visit::Visit};
 
-pub(crate) struct MatchFinder<'ast> {
+pub struct MatchFinder<'ast> {
     pub found: Option<&'ast ExprMatch>,
 }
 
