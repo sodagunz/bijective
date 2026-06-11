@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
-use syn::{Arm, Expr, ExprMatch, ExprPath, Pat, Path, visit::Visit};
+use quote::{format_ident, quote};
+use syn::{Arm, Expr, ExprMatch, ExprPath, ItemFn, Pat, Path, visit::Visit};
 
 struct MatchFinder<'ast> {
     found: Option<&'ast ExprMatch>,
@@ -19,42 +19,34 @@ impl<'ast> Visit<'ast> for MatchFinder<'ast> {
 
 #[proc_macro_attribute]
 pub fn surject(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let ast: Expr = syn::parse(input).unwrap(); // FIXME
+    let func: ItemFn = syn::parse(input).unwrap();
     let attr = attr.to_string();
-    impl_surject_macro(&attr, &ast).into()
+    impl_surject_macro(&attr, &func).into()
 }
 
-fn impl_surject_macro(attr: &str, ast: &Expr) -> TokenStream2 {
+fn impl_surject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
     let mut finder = MatchFinder { found: None };
-    finder.visit_expr(ast);
+    finder.visit_item_fn(func);
 
-    let ExprMatch {
-        expr: scrutinee,
-        arms,
-        ..
-    } = finder
-        .found
-        .unwrap_or_else(|| panic!("{attr} can only be used on (or around) a match expression"));
+    let ExprMatch { arms, .. } = finder.found.unwrap_or_else(|| {
+        panic!("{attr} can only be used on functions containing a match expression")
+    });
 
     validate_enum_to_enum_arms(arms);
 
     let output_type = enum_type_of_expr(arms[0].body.as_expr_path());
     let check_arms = surjectivity_check_arms(arms);
+    let check_fn_name = format_ident!("surjectivity_check_{}", func.sig.ident);
 
     quote! {
-        {
-            // This function is never called; it exists solely so the compiler
-            // verifies that every variant of the output type appears at least
-            // once as an arm body (i.e. the mapping is surjective).
-            #[expect(dead_code)]
-            fn surjectivity_check(output: #output_type) {
-                match output {
-                    #(#check_arms)*
-                }
-            }
+        #func
 
-            match #scrutinee {
-                #(#arms)*
+        // Never called; exists solely so the compiler verifies that every
+        // variant of the output type appears at least once as an arm body.
+        #[expect(dead_code)]
+        fn #check_fn_name(output: #output_type) {
+            match output {
+                #(#check_arms)*
             }
         }
     }
@@ -163,59 +155,63 @@ impl AsExprPath for Expr {
 mod tests {
     use super::*;
 
-    fn parse(code: &str) -> Expr {
-        syn::parse_str(code).expect("test input failed to parse")
+    fn run(code: &str) -> TokenStream2 {
+        let func: ItemFn = syn::parse_str(code).expect("test input failed to parse");
+        impl_surject_macro("surject", &func)
     }
 
-    fn parse_output(code: &str) -> Expr {
-        let output = impl_surject_macro("surject", &parse(code));
+    fn parse_items(code: &str) -> Vec<syn::Item> {
+        let output = run(code);
         println!("{output}");
-        syn::parse2(output).expect("macro output should be a valid expression")
+        syn::parse_file(&output.to_string())
+            .expect("output should be valid items")
+            .items
     }
 
     // -- valid inputs ---------------------------------------------------------
 
     #[test]
-    fn generates_block_with_forward_match() {
-        let Expr::Block(block) =
-            parse_output("match a { Letters::A => Letters::D, Letters::B => Letters::C }")
-        else {
-            panic!("expected block expression");
-        };
-
-        // Last statement is the forward match expression.
-        let stmts = &block.block.stmts;
-        assert_eq!(
-            stmts.len(),
-            2,
-            "expected surjectivity_check fn + forward match"
+    fn generates_original_fn_and_check_fn() {
+        let items = parse_items(
+            "fn map(l: Letter) -> Letter {
+                match l {
+                    Letter::A => Letter::D,
+                    Letter::B => Letter::C,
+                    Letter::C => Letter::B,
+                    Letter::D => Letter::A,
+                }
+            }",
         );
 
-        let syn::Stmt::Expr(Expr::Match(forward), _) = stmts.last().unwrap() else {
-            panic!("expected match as last statement");
+        assert_eq!(
+            items.len(),
+            2,
+            "expected original fn + surjectivity_check fn"
+        );
+
+        let syn::Item::Fn(check_fn) = &items[1] else {
+            panic!("second item should be a fn");
         };
-        assert_eq!(forward.arms.len(), 2);
+        assert_eq!(check_fn.sig.ident, "surjectivity_check_map");
     }
 
     #[test]
     fn surjectivity_check_deduplicates_outputs() {
         // Two inputs map to the same output — a genuine surjection.
-        let Expr::Block(block) = parse_output(
-            "match d {
-                Dir::North => Axis::Vertical,
-                Dir::South => Axis::Vertical,
-                Dir::East  => Axis::Horizontal,
-                Dir::West  => Axis::Horizontal,
+        let items = parse_items(
+            "fn to_axis(d: Dir) -> Axis {
+                match d {
+                    Dir::North => Axis::Vertical,
+                    Dir::South => Axis::Vertical,
+                    Dir::East  => Axis::Horizontal,
+                    Dir::West  => Axis::Horizontal,
+                }
             }",
-        ) else {
-            panic!("expected block expression");
-        };
+        );
 
-        // First statement is the `fn surjectivity_check(...)` item.
-        let syn::Stmt::Item(syn::Item::Fn(check_fn)) = block.block.stmts.first().unwrap() else {
-            panic!("expected fn item as first statement");
+        let syn::Item::Fn(check_fn) = &items[1] else {
+            panic!("expected fn item");
         };
-        assert_eq!(check_fn.sig.ident, "surjectivity_check");
 
         // The check function body has one arm per *unique* output variant
         // (2: Vertical and Horizontal), not one per input arm (4).
@@ -225,27 +221,12 @@ mod tests {
         assert_eq!(inner.arms.len(), 2, "one arm per unique output variant");
     }
 
-    #[test]
-    fn match_inside_let_is_found() {
-        let expr = parse(
-            "let b = match a {
-                Letters::A => Letters::D,
-                Letters::B => Letters::C,
-                Letters::C => Letters::B,
-                Letters::D => Letters::A,
-            }",
-        );
-        let output = impl_surject_macro("surject", &expr);
-        assert!(!output.is_empty());
-        println!("{output}");
-    }
-
     // -- invalid: no match expression -----------------------------------------
 
     #[test]
-    #[should_panic(expected = "can only be used on (or around) a match expression")]
-    fn non_match_expr_panics() {
-        impl_surject_macro("surject", &parse("a + b"));
+    #[should_panic(expected = "can only be used on functions containing a match expression")]
+    fn no_match_panics() {
+        run("fn map(l: Letter) -> Letter { l }");
     }
 
     // -- invalid: arm patterns are not enum variant paths ---------------------
@@ -253,13 +234,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "arm pattern must be an enum variant path")]
     fn wildcard_pattern_panics() {
-        impl_surject_macro("surject", &parse("match a { _ => Letters::A }"));
+        run("fn map(a: Foo) -> Foo { match a { _ => Foo::A } }");
     }
 
     #[test]
     #[should_panic(expected = "arm pattern must be an enum variant path")]
     fn literal_pattern_panics() {
-        impl_surject_macro("surject", &parse("match a { 1 => Letters::A }"));
+        run("fn map(a: Foo) -> Foo { match a { 1 => Foo::A } }");
     }
 
     // -- invalid: arm bodies are not enum variant paths -----------------------
@@ -267,16 +248,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "arm body must be an enum variant path")]
     fn call_expression_body_panics() {
-        impl_surject_macro(
-            "surject",
-            &parse("match a { Letters::A => some_fn(), Letters::B => Letters::C }"),
-        );
+        run("fn map(a: Foo) -> Foo { match a { Foo::A => bar(), Foo::B => Foo::C } }");
     }
 
     #[test]
     #[should_panic(expected = "arm body must be an enum variant path")]
     fn literal_body_panics() {
-        impl_surject_macro("surject", &parse("match a { Letters::A => 42 }"));
+        run("fn map(a: Foo) -> Foo { match a { Foo::A => 42 } }");
     }
 
     // -- invalid: guards are not allowed --------------------------------------
@@ -284,9 +262,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "match guards are not supported")]
     fn guard_panics() {
-        impl_surject_macro(
-            "surject",
-            &parse("match a { Letters::A if cond => Letters::B }"),
-        );
+        run("fn map(a: Foo) -> Foo { match a { Foo::A if cond => Foo::B } }");
     }
 }
