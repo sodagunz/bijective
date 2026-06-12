@@ -5,32 +5,32 @@ properties on enum-to-enum `match` expressions.
 
 ## Background
 
-From a mathematical point of view, match expressions in Rust are **total** by
-design: The compiler ensures every possible value in the domain (every pattern)
-is handled.
+From a mathematical point of view, match expressions in Rust are [total functions](https://en.wikipedia.org/wiki/Partial_function)
+by design: The compiler ensures every possible value in the domain (every
+pattern) is handled.
 
-For most use cases, this is the most that's required and feasible. However, in
-simple enum-to-enum mappings (for example `From` implementations of enums that
+For most use cases, this is the most that's required and/or feasible. However, in
+simple enum-to-enum mappings (for example, `From` implementations of enums that
 cross architecture boundaries) it is often desirable to have stricter assurances.
 
-For example, when translating between two enum types with a `match` expression
-it is easy to accidentally:
+When translating between two enum types with a `match` expression it is easy to
+accidentally:
 
 * leave an output variant unreachable (not **surjective**), or
 * map two different inputs to the same output (not **injective**).
 
-`bijective` provides add-on attribute macros to enforce compile time checks for
+`bijective` provides drop-in attribute macros to enforce compile time checks for
 these mistakes, by annotating `let _ = match {}` bindings or functions returning
 a match. Support for attributes on expressions is still unstable so only these
 two use cases are currently provided.
 
 ## The three macros
 
-| Attribute | Alias | Property enforced |
-|---|---|---|
-| `#[surjective]` | `#[onto]` | Every output variant is produced by at least one arm (**onto**). |
-| `#[injective]` | `#[one_to_one]` | No two arms produce the same output variant (**one-to-one**). |
-| `#[bijective]` | — | Both of the above simultaneously (**bijection**). |
+| Attribute       | Alias           | Property enforced                                                |
+|-----------------|-----------------|------------------------------------------------------------------|
+| `#[surjective]` | `#[onto]`       | Every output variant is produced by at least one arm (**onto**). |
+| `#[injective]`  | `#[one_to_one]` | No two arms produce the same output variant (**one-to-one**).    |
+| `#[bijective]`  | —               | Both of the above simultaneously (**bijection**).                |
 
 ## Usage
 
@@ -86,12 +86,18 @@ The macro generates a private companion function `surjectivity_check_<fn_name>`
 whose body is a `match` over the *output* type covering every unique variant that
 appears as an arm body. If any variant of the output enum is absent, the compiler
 reports a **non-exhaustive pattern** error pointing at the `#[surjective]`
-attribute. This type of manual hack has existed for years in Rust folklore, but it
+attribute. 
+
+This type of manual hack has existed for years in Rust folklore, but it
 is ugly and verbose, and users first encountering it usually experience a mixture
-of awe and horror. The trick is legit though: because the function is `dead_code`,
+of awe and horror. 
+
+The trick is legit though: because the function is `dead_code`,
 it has 0 runtime cost, and ensures the verification happens at compile time, which
 is usually preferable to tests. Abstracting away this trick, and replacing it with
-a single line add-on attribute has been the main motivator for this crate.
+a single line drop-in attribute has been the main motivator for this crate. 
+It makes intent clear and concise in a way a preimage closure with comments can't
+match.
 
 ### Injectivity (`#[injective]`, `#[one_to_one]`)
 
@@ -129,6 +135,12 @@ A mapping function must satisfy all of the following for the attribute to accept
 LLMs (agents, edit predictions) have been used during the development of this
 crate's code. Intent, design and implementation have all been human-driven, and
 I have read all code and refactored most of it to my own personal liking.
+
+All prose and documentation are my own personal words, and I advocate that others
+do the same. I’m ok with machines reading machine generated slop, but text made
+for humans is best written by other humans.
+
+Commits with AI assistance have an `Assisted-by` footer in the [NixOS style](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md#transparency)
 
 ## License
 

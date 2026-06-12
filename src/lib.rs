@@ -5,9 +5,9 @@
 //!
 //! ## Background
 //!
-//! From a mathematical point of view, match expressions in Rust are **total** by
-//! design: The compiler ensures every possible value in the domain (every pattern)
-//! is handled.
+//! From a mathematical point of view, match expressions in Rust are [total functions](https://en.wikipedia.org/wiki/Partial_function)
+//! by design: The compiler ensures every possible value in the domain (every
+//! pattern) is handled.
 //!
 //! For most use cases, this is the most that's required and feasible. However, in
 //! simple enum-to-enum mappings (for example `From` implementations of enums that
@@ -87,13 +87,17 @@
 //! type covering every unique variant that appears as an arm body.  If any
 //! variant of the output enum is absent, the compiler reports a
 //! **non-exhaustive pattern** error pointing at the `#[surjective]` attribute.
-//! This types of manual hacks have existed for years in Rust folklore, but it
+//!
+//! This type of manual hacks have existed for years in Rust folklore, but it
 //! is ugly and verbose, and users first encountering it usually experience a
-//! mixture of awe and horror. The trick is legit though: because the function
-//! is dead_code, it has 0 runtime cost, and ensures the verification happens
-//! at compile time, which is usually desirable to tests.
-//! Abstracting away this trick, and replacing it with a single line add-on
-//! attribute has been the main motivator for this crate.
+//! mixture of awe and horror.
+//!
+//! The trick is legit though: because the function is dead_code, it has 0
+//! runtime cost, and ensures the verification happens at compile time,
+//! which is usually desirable to tests.
+//! Abstracting away this trick, and replacing it with a single line drop-in
+//! attribute has been the main motivator for this crate. It makes intent clear
+//! and concise in a way a preimage closure with comments just can't match.
 //!
 //! ### Injectivity (`#[injective]`, `#[one_to_one]`)
 //!
@@ -138,7 +142,7 @@
 //! do the same. I'm ok with machines reading machine generated slop, but text
 //! made for humans is best written by other humans.
 //!
-//! Commits with heavy AI assistance have an `Assisted-by` footer in the [NixOS style](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md#transparency)
+//! Commits with AI assistance have an `Assisted-by` footer in the [NixOS style](https://github.com/NixOS/nixpkgs/blob/master/CONTRIBUTING.md#transparency)
 
 mod implementation;
 #[cfg(test)]
