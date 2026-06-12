@@ -1,4 +1,4 @@
-use surject::surject;
+use bijective::surjective;
 
 // Not surjective: Axis::Horizontal is never produced by any arm,
 // so the compiler should reject this.
@@ -13,7 +13,7 @@ enum Axis {
     Horizontal,
 }
 
-#[surject]
+#[surjective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,

@@ -1,4 +1,4 @@
-# surject
+# bijective
 
 Compile-time verification of **surjective**, **injective**, and **bijective**
 properties on enum-to-enum `match` expressions.
@@ -12,20 +12,20 @@ to accidentally:
 * map two different inputs to the same output (not **injective** / not
   *one-to-one*).
 
-`surject` catches both mistakes **at compile time** through proc-macro
+`bijective` catches both mistakes **at compile time** through proc-macro
 attributes you place on the mapping function.
 
 ## Macros
 
 | Attribute | Alias | Property enforced |
 |---|---|---|
-| `#[surject]` | `#[onto]` | Every output variant is produced by at least one arm (*onto*). |
-| `#[inject]` | `#[one_to_one]` | No two arms produce the same output variant (*one-to-one*). |
-| `#[biject]` | — | Both of the above simultaneously (*bijection*). |
+| `#[surjective]` | `#[onto]` | Every output variant is produced by at least one arm (*onto*). |
+| `#[injective]` | `#[one_to_one]` | No two arms produce the same output variant (*one-to-one*). |
+| `#[bijective]` | — | Both of the above simultaneously (*bijection*). |
 
 ---
 
-## `#[surject]` / `#[onto]`
+## `#[surjective]` / `#[onto]`
 
 Verifies that every variant of the output enum is reachable — i.e. the mapping
 is *onto* (surjective).
@@ -34,7 +34,7 @@ The macro generates a private companion function
 `surjectivity_check_<fn_name>` that exhaustively matches over the output type
 using only the variants seen in the annotated function's arms.  If any variant
 is absent, the **compiler** reports a non-exhaustive pattern error pointing at
-the `#[surject]` attribute.
+the `#[surjective]` attribute.
 
 ### Compile-pass: many-to-one mapping
 
@@ -42,12 +42,12 @@ A classic surjection — multiple inputs collapse to the same output variant, bu
 every output variant is covered:
 
 ```rust
-use surject::surject;
+use bijective::surjective;
 
 enum Direction { North, South, East, West }
 enum Axis      { Vertical, Horizontal }
 
-#[surject]
+#[surjective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,
@@ -63,11 +63,11 @@ fn to_axis(d: Direction) -> Axis {
 A bijection is also surjective (every output appears exactly once):
 
 ```rust
-use surject::surject;
+use bijective::surjective;
 
 enum Letter { A, B, C, D }
 
-#[surject]
+#[surjective]
 fn swap(l: Letter) -> Letter {
     match l {
         Letter::A => Letter::D,
@@ -83,12 +83,12 @@ fn swap(l: Letter) -> Letter {
 `Axis::Horizontal` is never produced — the compiler rejects this:
 
 ```rust,compile_fail
-use surject::surject;
+use bijective::surjective;
 
 enum Direction { North, South, East, West }
 enum Axis      { Vertical, Horizontal }
 
-#[surject]
+#[surjective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,
@@ -102,12 +102,12 @@ fn to_axis(d: Direction) -> Axis {
 
 ---
 
-## `#[inject]` / `#[one_to_one]`
+## `#[injective]` / `#[one_to_one]`
 
 Verifies that no two arms produce the same output variant — i.e. the mapping is
 *one-to-one* (injective).
 
-Unlike `#[surject]`, this does **not** require all output variants to be
+Unlike `#[surjective]`, this does **not** require all output variants to be
 covered.  An injection from a smaller domain into a larger codomain — where some
 output variants are legitimately never produced — is perfectly valid.
 
@@ -120,12 +120,12 @@ error pointing at the second occurrence of the duplicate output path.
 produced — that is fine:
 
 ```rust
-use surject::inject;
+use bijective::injective;
 
 enum SmallEnum { A, B }
 enum LargeEnum { X, Y, Z }
 
-#[inject]
+#[injective]
 fn embed(s: SmallEnum) -> LargeEnum {
     match s {
         SmallEnum::A => LargeEnum::X,
@@ -139,11 +139,11 @@ fn embed(s: SmallEnum) -> LargeEnum {
 A bijection is also injective (each output appears exactly once):
 
 ```rust
-use surject::inject;
+use bijective::injective;
 
 enum Letter { A, B, C, D }
 
-#[inject]
+#[injective]
 fn swap(l: Letter) -> Letter {
     match l {
         Letter::A => Letter::D,
@@ -159,12 +159,12 @@ fn swap(l: Letter) -> Letter {
 Both `North` and `South` produce `Axis::Vertical`:
 
 ```rust,compile_fail
-use surject::inject;
+use bijective::injective;
 
 enum Direction { North, South, East, West }
 enum Axis      { Vertical, Horizontal }
 
-#[inject]
+#[injective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,
@@ -179,7 +179,7 @@ fn to_axis(d: Direction) -> Axis {
 
 ---
 
-## `#[biject]`
+## `#[bijective]`
 
 Verifies both properties simultaneously: no duplicate outputs **and** every
 output variant is covered.
@@ -191,11 +191,11 @@ compiler verify exhaustiveness.
 ### Compile-pass: true bijection
 
 ```rust
-use surject::biject;
+use bijective::bijective;
 
 enum Letter { A, B, C, D }
 
-#[biject]
+#[bijective]
 fn swap(l: Letter) -> Letter {
     match l {
         Letter::A => Letter::D,
@@ -211,12 +211,12 @@ fn swap(l: Letter) -> Letter {
 `Axis::Vertical` appears twice — the injectivity check fires at expansion time:
 
 ```rust,compile_fail
-use surject::biject;
+use bijective::bijective;
 
 enum Direction { North, South, East, West }
 enum Axis      { Vertical, Horizontal }
 
-#[biject]
+#[bijective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,
@@ -232,12 +232,12 @@ fn to_axis(d: Direction) -> Axis {
 `LargeEnum::Z` is never produced — the compiler's exhaustiveness check fires:
 
 ```rust,compile_fail
-use surject::biject;
+use bijective::bijective;
 
 enum SmallEnum { A, B }
 enum LargeEnum { X, Y, Z }
 
-#[biject]
+#[bijective]
 fn embed(s: SmallEnum) -> LargeEnum {
     match s {
         SmallEnum::A => LargeEnum::X,
@@ -270,7 +270,7 @@ all of the following for the attribute to accept it:
 
 ```toml
 [dependencies]
-surject = { path = "..." }   # or version = "..." once published
+bijective = { path = "..." }   # or version = "..." once published
 ```
 
 ## License

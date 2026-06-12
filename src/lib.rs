@@ -1,4 +1,4 @@
-//! # surject
+//! # bijective
 //!
 //! Compile-time verification of **surjective**, **injective**, and **bijective**
 //! properties on enum-to-enum `match` expressions.
@@ -12,27 +12,27 @@
 //! * map two different inputs to the same output (not **injective** / not
 //!   *one-to-one*).
 //!
-//! `surject` catches both mistakes **at compile time** through proc-macro
+//! `bijective` catches both mistakes **at compile time** through proc-macro
 //! attributes that you place on the mapping function.
 //!
 //! ## The three macros
 //!
 //! | Attribute                     | Alias           | Property enforced                                                |
 //! |-------------------------------|-----------------|------------------------------------------------------------------|
-//! | [`#[surject]`](macro@surject) | `#[onto]`       | Every output variant is produced by at least one arm (**onto**). |
-//! | [`#[inject]`](macro@inject)   | `#[one_to_one]` | No two arms produce the same output variant (**one-to-one**).    |
-//! | [`#[biject]`](macro@biject)   | —               | Both of the above simultaneously (**bijection**).                |
+//! | [`#[surjective]`](macro@surjective) | `#[onto]`       | Every output variant is produced by at least one arm (**onto**). |
+//! | [`#[injective]`](macro@injective)   | `#[one_to_one]` | No two arms produce the same output variant (**one-to-one**).    |
+//! | [`#[bijective]`](macro@bijective)   | —               | Both of the above simultaneously (**bijection**).                |
 //!
 //! ## Quick start
 //!
 //! ```rust
-//! use surject::{surject, inject, biject};
+//! use bijective::{surjective, injective, bijective};
 //!
 //! enum Direction { North, South, East, West }
 //! enum Axis      { Vertical, Horizontal }
 //!
 //! // OK — every Axis variant is produced at least once.
-//! #[surject]
+//! #[surjective]
 //! fn to_axis(d: Direction) -> Axis {
 //!     match d {
 //!         Direction::North => Axis::Vertical,
@@ -46,7 +46,7 @@
 //! enum Large { X, Y, Z }
 //!
 //! // OK — every Small variant maps to a *distinct* Large variant.
-//! #[inject]
+//! #[injective]
 //! fn embed(s: Small) -> Large {
 //!     match s {
 //!         Small::A => Large::X,
@@ -57,7 +57,7 @@
 //! enum Letter { A, B, C, D }
 //!
 //! // OK — every letter maps to a distinct letter, and all letters appear as output.
-//! #[biject]
+//! #[bijective]
 //! fn swap(l: Letter) -> Letter {
 //!     match l {
 //!         Letter::A => Letter::D,
@@ -70,21 +70,21 @@
 //!
 //! ## How the checks work
 //!
-//! ### Surjectivity (`#[surject]`, `#[onto]`)
+//! ### Surjectivity (`#[surjective]`, `#[onto]`)
 //!
 //! The macro generates a private companion function
 //! `surjectivity_check_<fn_name>` whose body is a `match` over the *output*
 //! type covering every unique variant that appears as an arm body.  If any
 //! variant of the output enum is absent, the compiler reports a
-//! **non-exhaustive pattern** error pointing at the `#[surject]` attribute.
+//! **non-exhaustive pattern** error pointing at the `#[surjective]` attribute.
 //!
-//! ### Injectivity (`#[inject]`, `#[one_to_one]`)
+//! ### Injectivity (`#[injective]`, `#[one_to_one]`)
 //!
 //! The macro inspects every arm at expansion time and emits a
 //! **`compile_error!`** with a span pointing at the second (duplicate) output
 //! variant if the same output path appears more than once.
 //!
-//! ### Bijectivity (`#[biject]`)
+//! ### Bijectivity (`#[bijective]`)
 //!
 //! Combines both checks: the injectivity check runs first (at expansion time),
 //! and the surjectivity check is delegated to the compiler via a generated
@@ -114,7 +114,7 @@ mod tests;
 mod validation;
 mod visitor;
 
-use implementation::{impl_biject_macro, impl_inject_macro, impl_surject_macro};
+use implementation::{impl_bijective_macro, impl_injective_macro, impl_surjective_macro};
 use proc_macro::TokenStream;
 use syn::ItemFn;
 
@@ -130,7 +130,7 @@ use syn::ItemFn;
 /// `surjectivity_check_<fn_name>` that exhaustively matches over the *output*
 /// type.  If any variant of that type is absent from the original function's
 /// arms, the compiler reports a non-exhaustive pattern error pointing at the
-/// `#[surject]` attribute site.
+/// `#[surjective]` attribute site.
 ///
 /// # Panics
 ///
@@ -152,12 +152,12 @@ use syn::ItemFn;
 /// output variant is covered:
 ///
 /// ```rust,ignore
-/// use surject::surject;
+/// use bijective::surjective;
 ///
 /// enum Direction { North, South, East, West }
 /// enum Axis      { Vertical, Horizontal }
 ///
-/// #[surject]
+/// #[surjective]
 /// fn to_axis(d: Direction) -> Axis {
 ///     match d {
 ///         Direction::North => Axis::Vertical,
@@ -173,11 +173,11 @@ use syn::ItemFn;
 /// A bijection is also surjective (every output appears exactly once):
 ///
 /// ```rust,ignore
-/// use surject::surject;
+/// use bijective::surjective;
 ///
 /// enum Letter { A, B, C, D }
 ///
-/// #[surject]
+/// #[surjective]
 /// fn swap(l: Letter) -> Letter {
 ///     match l {
 ///         Letter::A => Letter::D,
@@ -193,12 +193,12 @@ use syn::ItemFn;
 /// `Axis::Horizontal` is never produced, so the compiler rejects this:
 ///
 /// ```rust,ignore
-/// use surject::surject;
+/// use bijective::surjective;
 ///
 /// enum Direction { North, South, East, West }
 /// enum Axis      { Vertical, Horizontal }
 ///
-/// #[surject]                          // error[E0004]: non-exhaustive patterns:
+/// #[surjective]                          // error[E0004]: non-exhaustive patterns:
 /// fn to_axis(d: Direction) -> Axis {  //   `Axis::Horizontal` not covered
 ///     match d {
 ///         Direction::North => Axis::Vertical,
@@ -209,12 +209,12 @@ use syn::ItemFn;
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn surject(attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn surjective(attr: TokenStream, input: TokenStream) -> TokenStream {
     let func: ItemFn = syn::parse(input).unwrap();
-    impl_surject_macro(&attr.to_string(), &func).into()
+    impl_surjective_macro(&attr.to_string(), &func).into()
 }
 
-/// Alias for [`#[surject]`](macro@surject).
+/// Alias for [`#[surjective]`](macro@surjective).
 ///
 /// Use `#[onto]` when you prefer the set-theory terminology (*onto* = every
 /// element of the codomain is mapped to by at least one element of the domain).
@@ -222,7 +222,7 @@ pub fn surject(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```rust,ignore
-/// use surject::onto;
+/// use bijective::onto;
 ///
 /// enum Direction { North, South, East, West }
 /// enum Axis      { Vertical, Horizontal }
@@ -239,7 +239,7 @@ pub fn surject(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
-    surject(attr, input)
+    surjective(attr, input)
 }
 
 /// Verifies at compile time that the annotated function's `match` expression
@@ -254,7 +254,7 @@ pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// span-accurate `compile_error!` pointing at the *second* occurrence of any
 /// duplicate output variant.
 ///
-/// Note that `#[inject]` does **not** require the mapping to be surjective.
+/// Note that `#[injective]` does **not** require the mapping to be surjective.
 /// An injective mapping from a smaller domain to a larger codomain — where some
 /// output variants are legitimately never produced — is perfectly valid.
 ///
@@ -275,15 +275,15 @@ pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ## Compile-pass: strict injection (smaller domain)
 ///
 /// `SmallEnum` embeds into a subset of `LargeEnum`.  `LargeEnum::Z` is never
-/// produced — that is fine, because `#[inject]` only cares about uniqueness:
+/// produced — that is fine, because `#[injective]` only cares about uniqueness:
 ///
 /// ```rust
-/// use surject::inject;
+/// use bijective::injective;
 ///
 /// enum SmallEnum { A, B }
 /// enum LargeEnum { X, Y, Z }
 ///
-/// #[inject]
+/// #[injective]
 /// fn embed(s: SmallEnum) -> LargeEnum {
 ///     match s {
 ///         SmallEnum::A => LargeEnum::X,
@@ -297,11 +297,11 @@ pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// A bijection is also injective (each output appears exactly once):
 ///
 /// ```rust
-/// use surject::inject;
+/// use bijective::injective;
 ///
 /// enum Letter { A, B, C, D }
 ///
-/// #[inject]
+/// #[injective]
 /// fn swap(l: Letter) -> Letter {
 ///     match l {
 ///         Letter::A => Letter::D,
@@ -318,12 +318,12 @@ pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// injective:
 ///
 /// ```rust,ignore
-/// use surject::inject;
+/// use bijective::injective;
 ///
 /// enum Direction { North, South, East, West }
 /// enum Axis      { Vertical, Horizontal }
 ///
-/// #[inject]
+/// #[injective]
 /// fn to_axis(d: Direction) -> Axis {
 ///     match d {
 ///         Direction::North => Axis::Vertical,
@@ -334,12 +334,12 @@ pub fn onto(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn inject(attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn injective(attr: TokenStream, input: TokenStream) -> TokenStream {
     let func: ItemFn = syn::parse(input).unwrap();
-    impl_inject_macro(&attr.to_string(), &func).into()
+    impl_injective_macro(&attr.to_string(), &func).into()
 }
 
-/// Alias for [`#[inject]`](macro@inject).
+/// Alias for [`#[injective]`](macro@injective).
 ///
 /// Use `#[one_to_one]` when you prefer the plain English terminology over the
 /// mathematical *inject*.
@@ -347,7 +347,7 @@ pub fn inject(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```rust
-/// use surject::one_to_one;
+/// use bijective::one_to_one;
 ///
 /// enum SmallEnum { A, B }
 /// enum LargeEnum { X, Y, Z }
@@ -362,7 +362,7 @@ pub fn inject(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
-    inject(attr, input)
+    injective(attr, input)
 }
 
 /// Verifies at compile time that the annotated function's `match` expression
@@ -375,7 +375,7 @@ pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///    `compile_error!` is emitted for the first duplicate output variant found.
 /// 2. **Surjectivity** is delegated to the compiler via an exhaustive
 ///    `bijectivity_check_<fn_name>` companion function.  A missing output
-///    variant causes a non-exhaustive pattern error pointing at the `#[biject]`
+///    variant causes a non-exhaustive pattern error pointing at the `#[bijective]`
 ///    attribute site.
 ///
 /// The injectivity check runs first; if it fails the surjectivity helper is not
@@ -403,11 +403,11 @@ pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// Every letter maps to a distinct letter, and all letters appear as output:
 ///
 /// ```rust
-/// use surject::biject;
+/// use bijective::bijective;
 ///
 /// enum Letter { A, B, C, D }
 ///
-/// #[biject]
+/// #[bijective]
 /// fn swap(l: Letter) -> Letter {
 ///     match l {
 ///         Letter::A => Letter::D,
@@ -424,12 +424,12 @@ pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// expansion time:
 ///
 /// ```rust,ignore
-/// use surject::biject;
+/// use bijective::bijective;
 ///
 /// enum Direction { North, South, East, West }
 /// enum Axis      { Vertical, Horizontal }
 ///
-/// #[biject]
+/// #[bijective]
 /// fn to_axis(d: Direction) -> Axis {
 ///     match d {
 ///         Direction::North => Axis::Vertical,
@@ -446,12 +446,12 @@ pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// rejects this:
 ///
 /// ```rust,ignore
-/// use surject::biject;
+/// use bijective::bijective;
 ///
 /// enum SmallEnum { A, B }
 /// enum LargeEnum { X, Y, Z }
 ///
-/// #[biject]                                // error[E0004]: non-exhaustive patterns:
+/// #[bijective]                                // error[E0004]: non-exhaustive patterns:
 /// fn embed(s: SmallEnum) -> LargeEnum {   //   `LargeEnum::Z` not covered
 ///     match s {
 ///         SmallEnum::A => LargeEnum::X,
@@ -460,7 +460,7 @@ pub fn one_to_one(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn biject(attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn bijective(attr: TokenStream, input: TokenStream) -> TokenStream {
     let func: ItemFn = syn::parse(input).unwrap();
-    impl_biject_macro(&attr.to_string(), &func).into()
+    impl_bijective_macro(&attr.to_string(), &func).into()
 }

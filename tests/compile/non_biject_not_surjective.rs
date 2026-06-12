@@ -1,4 +1,4 @@
-use surject::biject;
+use bijective::bijective;
 
 // Injective but not surjective: LargeEnum::Z is never produced.
 // The surjectivity check (compiler exhaustiveness) should reject this.
@@ -12,7 +12,7 @@ enum LargeEnum {
     Z,
 }
 
-#[biject]
+#[bijective]
 fn embed(s: SmallEnum) -> LargeEnum {
     match s {
         SmallEnum::A => LargeEnum::X,

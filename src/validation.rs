@@ -24,26 +24,26 @@ pub fn find_and_validate<'f>(attr: &str, func: &'f ItemFn) -> &'f [Arm] {
 fn validate_enum_to_enum_arms(arms: &[Arm]) {
     assert!(
         !arms.is_empty(),
-        "surject: match must have at least one arm"
+        "bijective: match must have at least one arm"
     );
 
     for arm in arms {
         assert!(
             arm.guard.is_none(),
-            "surject: match guards are not supported"
+            "bijective: match guards are not supported"
         );
 
         match &arm.pat {
             Pat::Path(_) => {}
             _ => panic!(
-                "surject: every arm pattern must be an enum variant path (e.g. `Enum::Variant`)"
+                "bijective: every arm pattern must be an enum variant path (e.g. `Enum::Variant`)"
             ),
         }
 
         match arm.body.as_ref() {
             Expr::Path(_) => {}
             _ => panic!(
-                "surject: every arm body must be an enum variant path (e.g. `Enum::Variant`)"
+                "bijective: every arm body must be an enum variant path (e.g. `Enum::Variant`)"
             ),
         }
     }
@@ -65,7 +65,7 @@ pub fn check_injectivity(arms: &[Arm]) -> Option<TokenStream2> {
                 syn::Error::new(
                     output.span(),
                     format!(
-                        "inject: `{key}` is produced by more than one arm; \
+                        "injective: `{key}` is produced by more than one arm; \
                          the mapping is not injective"
                     ),
                 )
@@ -113,7 +113,7 @@ fn enum_type_of_path(path: &Path) -> Path {
     let n = path.segments.len();
     assert!(
         n >= 2,
-        "surject: enum path must have at least 2 segments (e.g. `Enum::Variant`), got: `{}`",
+        "bijective: enum path must have at least 2 segments (e.g. `Enum::Variant`), got: `{}`",
         quote::quote!(#path),
     );
 

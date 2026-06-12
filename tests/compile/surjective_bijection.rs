@@ -1,4 +1,4 @@
-use surject::surject;
+use bijective::surjective;
 
 // A bijection: every output variant is covered exactly once.
 enum Letter {
@@ -8,7 +8,7 @@ enum Letter {
     D,
 }
 
-#[surject]
+#[surjective]
 fn map(l: Letter) -> Letter {
     match l {
         Letter::A => Letter::D,

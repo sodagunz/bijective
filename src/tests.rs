@@ -1,20 +1,20 @@
-use crate::implementation::{impl_biject_macro, impl_inject_macro, impl_surject_macro};
+use crate::implementation::{impl_bijective_macro, impl_injective_macro, impl_surjective_macro};
 use proc_macro2::TokenStream as TokenStream2;
 use syn::ItemFn;
 
 fn run(code: &str) -> TokenStream2 {
     let func: ItemFn = syn::parse_str(code).expect("test input failed to parse");
-    impl_surject_macro("surject", &func)
+    impl_surjective_macro("surjective", &func)
 }
 
 fn run_inject(code: &str) -> TokenStream2 {
     let func: ItemFn = syn::parse_str(code).expect("test input failed to parse");
-    impl_inject_macro("inject", &func)
+    impl_injective_macro("injective", &func)
 }
 
 fn run_biject(code: &str) -> TokenStream2 {
     let func: ItemFn = syn::parse_str(code).expect("test input failed to parse");
-    impl_biject_macro("biject", &func)
+    impl_bijective_macro("bijective", &func)
 }
 
 fn parse_items(code: &str) -> Vec<syn::Item> {
@@ -29,7 +29,7 @@ fn is_compile_error(ts: &TokenStream2) -> bool {
     ts.to_string().contains("compile_error")
 }
 
-// -- surject ------------------------------------------------------------------
+// -- surjective ------------------------------------------------------------------
 
 #[test]
 fn generates_original_fn_and_check_fn() {
@@ -115,7 +115,7 @@ fn guard_panics() {
     run("fn map(a: Foo) -> Foo { match a { Foo::A if cond => Foo::B } }");
 }
 
-// -- inject -------------------------------------------------------------------
+// -- injective -------------------------------------------------------------------
 
 #[test]
 fn inject_bijection_passes() {
@@ -179,8 +179,8 @@ fn onto_is_surject_alias() {
         "fn map(l: Letter) -> Letter { match l { Letter::A => Letter::D, Letter::B => Letter::C } }"
     ).unwrap();
     assert_eq!(
-        impl_surject_macro("surject", &func).to_string(),
-        impl_surject_macro("onto", &func).to_string(),
+        impl_surjective_macro("surjective", &func).to_string(),
+        impl_surjective_macro("onto", &func).to_string(),
     );
 }
 
@@ -190,12 +190,12 @@ fn one_to_one_is_inject_alias() {
         "fn map(l: Letter) -> Letter { match l { Letter::A => Letter::D, Letter::B => Letter::C } }"
     ).unwrap();
     assert_eq!(
-        impl_inject_macro("inject", &func).to_string(),
-        impl_inject_macro("one_to_one", &func).to_string(),
+        impl_injective_macro("injective", &func).to_string(),
+        impl_injective_macro("one_to_one", &func).to_string(),
     );
 }
 
-// -- biject -------------------------------------------------------------------
+// -- bijective -------------------------------------------------------------------
 
 #[test]
 fn biject_bijection_passes() {

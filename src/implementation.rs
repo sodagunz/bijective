@@ -5,7 +5,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::ItemFn;
 
-pub fn impl_surject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
+pub fn impl_surjective_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
     let arms = find_and_validate(attr, func);
 
     let output_type = enum_type_of_expr(arms[0].body.as_expr_path());
@@ -26,7 +26,7 @@ pub fn impl_surject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
     }
 }
 
-pub fn impl_inject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
+pub fn impl_injective_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
     let arms = find_and_validate(attr, func);
 
     if let Some(err) = check_injectivity(arms) {
@@ -36,7 +36,7 @@ pub fn impl_inject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
     quote! { #func }
 }
 
-pub fn impl_biject_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
+pub fn impl_bijective_macro(attr: &str, func: &ItemFn) -> TokenStream2 {
     let arms = find_and_validate(attr, func);
 
     // Injectivity is checked at expansion time; bail out early with a

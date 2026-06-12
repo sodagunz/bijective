@@ -1,4 +1,4 @@
-use surject::inject;
+use bijective::injective;
 
 // A strict injection: SmallEnum embeds into a subset of LargeEnum.
 // Not surjective (LargeEnum::Z is never produced), but still injective.
@@ -12,7 +12,7 @@ enum LargeEnum {
     Z,
 }
 
-#[inject]
+#[injective]
 fn embed(s: SmallEnum) -> LargeEnum {
     match s {
         SmallEnum::A => LargeEnum::X,

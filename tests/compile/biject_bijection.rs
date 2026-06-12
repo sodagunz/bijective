@@ -1,4 +1,4 @@
-use surject::biject;
+use bijective::bijective;
 
 // A true bijection: every input maps to a distinct output,
 // and every output variant is covered.
@@ -9,7 +9,7 @@ enum Letter {
     D,
 }
 
-#[biject]
+#[bijective]
 fn map(l: Letter) -> Letter {
     match l {
         Letter::A => Letter::D,

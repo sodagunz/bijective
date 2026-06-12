@@ -1,4 +1,4 @@
-use surject::surject;
+use bijective::surjective;
 
 // A genuine many-to-one surjection: multiple inputs share an output variant,
 // but every output variant (Vertical, Horizontal) is covered at least once.
@@ -13,7 +13,7 @@ enum Axis {
     Horizontal,
 }
 
-#[surject]
+#[surjective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,

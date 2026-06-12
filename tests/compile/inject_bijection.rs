@@ -1,4 +1,4 @@
-use surject::inject;
+use bijective::injective;
 
 // A bijection: every input maps to a distinct output, so it is injective.
 enum Letter {
@@ -8,7 +8,7 @@ enum Letter {
     D,
 }
 
-#[inject]
+#[injective]
 fn map(l: Letter) -> Letter {
     match l {
         Letter::A => Letter::D,

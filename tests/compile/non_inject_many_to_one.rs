@@ -1,4 +1,4 @@
-use surject::inject;
+use bijective::injective;
 
 // Not injective: both North and South produce Axis::Vertical,
 // so the compiler should reject this.
@@ -13,7 +13,7 @@ enum Axis {
     Horizontal,
 }
 
-#[inject]
+#[injective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,

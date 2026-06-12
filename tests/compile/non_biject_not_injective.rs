@@ -1,4 +1,4 @@
-use surject::biject;
+use bijective::bijective;
 
 // Surjective but not injective: Axis::Vertical appears twice.
 // The injectivity check (proc macro level) should reject this.
@@ -13,7 +13,7 @@ enum Axis {
     Horizontal,
 }
 
-#[biject]
+#[bijective]
 fn to_axis(d: Direction) -> Axis {
     match d {
         Direction::North => Axis::Vertical,
