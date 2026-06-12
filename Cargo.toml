@@ -2,6 +2,13 @@
 name = "bijective"
 version = "0.1.0"
 edition = "2024"
+description = "Compile-time enforcement of surjective, injective, and bijective properties on enum-to-enum match expressions"
+license = "MIT"
+documentation = "https://docs.rs/bijective"
+homepage = "https://github.com/sodagunz/bijective"
+repository = "https://github.com/sodagunz/bijective"
+keywords = ["bijective", "enum", "proc-macro", "surjective", "injective"]
+categories = ["development-tools", "rust-patterns"]
 
 [lib]
 proc-macro = true
