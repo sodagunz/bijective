@@ -32,6 +32,32 @@ fn is_compile_error(ts: &TokenStream2) -> bool {
 // -- surjective ------------------------------------------------------------------
 
 #[test]
+fn let_statement_match_works() {
+    // The match is inside `let _ = ...`, not in tail position.
+    // The visitor should still find it and generate the surjectivity check.
+    let items = parse_items(
+        "fn map(l: Letter) -> () {
+            let _ = match l {
+                Letter::A => Letter::D,
+                Letter::B => Letter::C,
+                Letter::C => Letter::B,
+                Letter::D => Letter::A,
+            };
+        }",
+    );
+
+    assert_eq!(
+        items.len(),
+        2,
+        "expected original fn + surjectivity_check fn"
+    );
+    let syn::Item::Fn(check_fn) = &items[1] else {
+        panic!("second item should be a fn");
+    };
+    assert_eq!(check_fn.sig.ident, "surjectivity_check_map");
+}
+
+#[test]
 fn generates_original_fn_and_check_fn() {
     let items = parse_items(
         "fn map(l: Letter) -> Letter {
