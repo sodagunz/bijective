@@ -92,7 +92,7 @@
 //! is ugly and verbose, and users first encountering it usually experience a
 //! mixture of awe and horror.
 //!
-//! The trick is legit though: because the function is dead_code, it has 0
+//! The trick is legit though: because the function is `dead_code`, it has 0
 //! runtime cost, and ensures the verification happens at compile time,
 //! which is usually desirable to tests.
 //! Abstracting away this trick, and replacing it with a single line drop-in
